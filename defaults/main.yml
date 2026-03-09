@@ -107,7 +107,6 @@ auditd_data_retention_max_log_file_action: true
 auditd_data_retention_max_log_file_action_stig: true
 auditd_data_retention_space_left_action: true
 configure_crypto_policy: true
-configure_ssh_crypto_policy: true
 configure_strategy: true
 dconf_db_up_to_date: true
 disable_ctrlaltdel_burstaction: true
@@ -142,6 +141,7 @@ no_reboot_needed: true
 package_audit_installed: true
 package_cron_installed: true
 package_rsyslog_installed: true
+package_sequoia_sq_installed: true
 package_telnet_removed: true
 package_telnet_server_removed: true
 reboot_required: true
