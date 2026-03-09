@@ -4,6 +4,28 @@
   tags:
   - always
 
+- name: Ensure sequoia-sq is installed
+  ansible.builtin.package:
+    name: sequoia-sq
+    state: present
+  tags:
+  - CCE-86458-7
+  - PCI-DSSv4-6.3
+  - PCI-DSSv4-6.3.3
+  - enable_strategy
+  - low_complexity
+  - low_disruption
+  - low_severity
+  - no_reboot_needed
+  - package_sequoia-sq_installed
+  when:
+  - enable_strategy | bool
+  - low_complexity | bool
+  - low_disruption | bool
+  - low_severity | bool
+  - no_reboot_needed | bool
+  - package_sequoia_sq_installed | bool
+
 - name: Ensure rsyslog is installed
   ansible.builtin.package:
     name: rsyslog
@@ -941,36 +963,6 @@
   - no_reboot_needed
   - restrict_strategy
 
-- name: Configure SSH to use System Crypto Policy
-  ansible.builtin.lineinfile:
-    dest: /etc/sysconfig/sshd
-    state: absent
-    regexp: (?i)^\s*CRYPTO_POLICY.*$
-  when:
-  - configure_ssh_crypto_policy | bool
-  - disable_strategy | bool
-  - low_complexity | bool
-  - medium_disruption | bool
-  - medium_severity | bool
-  - reboot_required | bool
-  - '"kernel-core" in ansible_facts.packages'
-  tags:
-  - CCE-88557-4
-  - NIST-800-53-AC-17(2)
-  - NIST-800-53-AC-17(a)
-  - NIST-800-53-CM-6(a)
-  - NIST-800-53-MA-4(6)
-  - NIST-800-53-SC-13
-  - PCI-DSS-Req-2.2
-  - PCI-DSSv4-2.2
-  - PCI-DSSv4-2.2.7
-  - configure_ssh_crypto_policy
-  - disable_strategy
-  - low_complexity
-  - medium_disruption
-  - medium_severity
-  - reboot_required
-
 - name: Make sure that the dconf databases are up-to-date with regards to respective keyfiles - Get database modification
     time for distro
   ansible.builtin.stat:
@@ -1286,7 +1278,7 @@
   - medium_disruption
   - no_reboot_needed
 
-- name: Read permission of GPG key directory
+- name: 'Ensure Red Hat GPG Key Installed: Read permission of GPG key directory'
   ansible.builtin.stat:
     path: /etc/pki/rpm-gpg/
   register: gpg_key_directory_permission
@@ -1317,12 +1309,12 @@
   - no_reboot_needed | bool
   - restrict_strategy | bool
 
-- name: Read signatures in GPG key
-  ansible.builtin.command: gpg --show-keys --with-fingerprint --with-colons "/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release"
+- name: 'Ensure Red Hat GPG Key Installed:  Read signatures in GPG key using sq'
+  ansible.builtin.command: sq inspect /etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
   changed_when: false
-  register: gpg_fingerprints
   failed_when: false
   check_mode: false
+  register: gpg_fingerprints
   tags:
   - CCE-88256-3
   - CJIS-5.10.4.1
@@ -1349,11 +1341,10 @@
   - no_reboot_needed | bool
   - restrict_strategy | bool
 
-- name: Set Fact - Installed GPG Fingerprints
+- name: 'Ensure Red Hat GPG Key Installed: Set Fact - Installed GPG Fingerprints (sq format)'
   ansible.builtin.set_fact:
-    gpg_installed_fingerprints: '{{ gpg_fingerprints.stdout | regex_findall(''^pub.*
-
-      (?:^fpr[:]*)([0-9A-Fa-f]*)'', ''\1'') | list }}'
+    gpg_installed_fingerprints: '{{ gpg_fingerprints.stdout | regex_findall(''Fingerprint:\s*([0-9A-Fa-f]+)'', ''\1'') | list
+      }}'
   tags:
   - CCE-88256-3
   - CJIS-5.10.4.1
@@ -1380,11 +1371,19 @@
   - no_reboot_needed | bool
   - restrict_strategy | bool
 
-- name: Set Fact - Valid fingerprints
+- name: 'Ensure Red Hat GPG Key Installed: Set Fact - Valid fingerprints (without PQC)'
   ansible.builtin.set_fact:
     gpg_valid_fingerprints:
     - 567E347AD0044ADE55BA8A5F199E2F91FD431D51
     - 7E4624258C406535D56D6F135054E4A45A6340B3
+  when:
+  - ensure_redhat_gpgkey_installed | bool
+  - high_severity | bool
+  - medium_complexity | bool
+  - medium_disruption | bool
+  - no_reboot_needed | bool
+  - restrict_strategy | bool
+  - ansible_distribution_version is version('10.1', '<')
   tags:
   - CCE-88256-3
   - CJIS-5.10.4.1
@@ -1403,6 +1402,13 @@
   - medium_disruption
   - no_reboot_needed
   - restrict_strategy
+
+- name: 'Ensure Red Hat GPG Key Installed: Set Fact - Valid fingerprints (with PQC)'
+  ansible.builtin.set_fact:
+    gpg_valid_fingerprints:
+    - 567E347AD0044ADE55BA8A5F199E2F91FD431D51
+    - 7E4624258C406535D56D6F135054E4A45A6340B3
+    - FCD355B305707A62DA143AB6E422397E50FE8467A2A95343D246D6276AFEDF8F
   when:
   - ensure_redhat_gpgkey_installed | bool
   - high_severity | bool
@@ -1410,11 +1416,28 @@
   - medium_disruption | bool
   - no_reboot_needed | bool
   - restrict_strategy | bool
+  - ansible_distribution_version is version('10.1', '>=')
+  tags:
+  - CCE-88256-3
+  - CJIS-5.10.4.1
+  - NIST-800-171-3.4.8
+  - NIST-800-53-CM-5(3)
+  - NIST-800-53-CM-6(a)
+  - NIST-800-53-SC-12
+  - NIST-800-53-SC-12(3)
+  - NIST-800-53-SI-7
+  - PCI-DSS-Req-6.2
+  - PCI-DSSv4-6.3
+  - PCI-DSSv4-6.3.3
+  - ensure_redhat_gpgkey_installed
+  - high_severity
+  - medium_complexity
+  - medium_disruption
+  - no_reboot_needed
+  - restrict_strategy
 
-- name: Import RedHat GPG key
-  ansible.builtin.rpm_key:
-    state: present
-    key: /etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+- name: 'Ensure Red Hat GPG Key Installed: Import RedHat GPG key'
+  ansible.builtin.command: rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
   when:
   - ensure_redhat_gpgkey_installed | bool
   - high_severity | bool
@@ -1612,6 +1635,8 @@
     create: true
     dest: /etc/systemd/system/emergency.service.d/10-oscap.conf
     block: '[Service]
+
+      ExecStart=
 
       ExecStart=-/usr/lib/systemd/systemd-sulogin-shell emergency'
   when:
@@ -2616,11 +2641,38 @@
   - reboot_required
   - sysctl_kernel_dmesg_restrict
 
+- name: Restrict Access to Kernel Message Buffer - Comment out any occurrences of kernel.dmesg_restrict from /etc/sysctl.conf
+  ansible.builtin.replace:
+    path: '{{ item }}'
+    regexp: ^[\s]*kernel.dmesg_restrict
+    replace: '#kernel.dmesg_restrict'
+  with_fileglob:
+  - /etc/sysctl.conf
+  when:
+  - disable_strategy | bool
+  - low_complexity | bool
+  - low_severity | bool
+  - medium_disruption | bool
+  - reboot_required | bool
+  - sysctl_kernel_dmesg_restrict | bool
+  - '"kernel-core" in ansible_facts.packages'
+  tags:
+  - CCE-89000-4
+  - NIST-800-171-3.1.5
+  - NIST-800-53-SI-11(a)
+  - NIST-800-53-SI-11(b)
+  - disable_strategy
+  - low_complexity
+  - low_severity
+  - medium_disruption
+  - reboot_required
+  - sysctl_kernel_dmesg_restrict
+
 - name: Restrict Access to Kernel Message Buffer - Ensure sysctl kernel.dmesg_restrict is set to 1
   ansible.posix.sysctl:
     name: kernel.dmesg_restrict
     value: '1'
-    sysctl_file: /etc/sysctl.conf
+    sysctl_file: /etc/sysctl.d/kernel_dmesg_restrict.conf
     state: present
     reload: true
   when:
@@ -2759,11 +2811,40 @@
   - reboot_required
   - sysctl_fs_suid_dumpable
 
+- name: Disable Core Dumps for SUID programs - Comment out any occurrences of fs.suid_dumpable from /etc/sysctl.conf
+  ansible.builtin.replace:
+    path: '{{ item }}'
+    regexp: ^[\s]*fs.suid_dumpable
+    replace: '#fs.suid_dumpable'
+  with_fileglob:
+  - /etc/sysctl.conf
+  when:
+  - disable_strategy | bool
+  - low_complexity | bool
+  - medium_disruption | bool
+  - medium_severity | bool
+  - reboot_required | bool
+  - sysctl_fs_suid_dumpable | bool
+  - '"kernel-core" in ansible_facts.packages'
+  tags:
+  - CCE-88399-1
+  - NIST-800-53-SI-11(a)
+  - NIST-800-53-SI-11(b)
+  - PCI-DSSv4-3.3
+  - PCI-DSSv4-3.3.1
+  - PCI-DSSv4-3.3.1.1
+  - disable_strategy
+  - low_complexity
+  - medium_disruption
+  - medium_severity
+  - reboot_required
+  - sysctl_fs_suid_dumpable
+
 - name: Disable Core Dumps for SUID programs - Ensure sysctl fs.suid_dumpable is set to 0
   ansible.posix.sysctl:
     name: fs.suid_dumpable
     value: '0'
-    sysctl_file: /etc/sysctl.conf
+    sysctl_file: /etc/sysctl.d/fs_suid_dumpable.conf
     state: present
     reload: true
   when:
@@ -2990,11 +3071,44 @@
   - reboot_required
   - sysctl_kernel_randomize_va_space
 
+- name: Enable Randomized Layout of Virtual Address Space - Comment out any occurrences of kernel.randomize_va_space from
+    /etc/sysctl.conf
+  ansible.builtin.replace:
+    path: '{{ item }}'
+    regexp: ^[\s]*kernel.randomize_va_space
+    replace: '#kernel.randomize_va_space'
+  with_fileglob:
+  - /etc/sysctl.conf
+  when:
+  - disable_strategy | bool
+  - low_complexity | bool
+  - medium_disruption | bool
+  - medium_severity | bool
+  - reboot_required | bool
+  - sysctl_kernel_randomize_va_space | bool
+  - '"kernel-core" in ansible_facts.packages'
+  tags:
+  - CCE-87876-9
+  - NIST-800-171-3.1.7
+  - NIST-800-53-CM-6(a)
+  - NIST-800-53-SC-30
+  - NIST-800-53-SC-30(2)
+  - PCI-DSS-Req-2.2.1
+  - PCI-DSSv4-3.3
+  - PCI-DSSv4-3.3.1
+  - PCI-DSSv4-3.3.1.1
+  - disable_strategy
+  - low_complexity
+  - medium_disruption
+  - medium_severity
+  - reboot_required
+  - sysctl_kernel_randomize_va_space
+
 - name: Enable Randomized Layout of Virtual Address Space - Ensure sysctl kernel.randomize_va_space is set to 2
   ansible.posix.sysctl:
     name: kernel.randomize_va_space
     value: '2'
-    sysctl_file: /etc/sysctl.conf
+    sysctl_file: /etc/sysctl.d/kernel_randomize_va_space.conf
     state: present
     reload: true
   when:
@@ -3249,7 +3363,7 @@
 - name: Ensure SELinux State is Enforcing - Check current SELinux state
   ansible.builtin.command:
     cmd: getenforce
-  register: selinux_state
+  register: current_selinux_state
   check_mode: false
   changed_when: false
   when:
@@ -3341,7 +3455,7 @@
   - restrict_strategy | bool
   - selinux_state | bool
   - '"kernel-core" in ansible_facts.packages'
-  - selinux_state.stdout | lower != var_selinux_state
+  - current_selinux_state.stdout | lower != var_selinux_state
   tags:
   - CCE-89386-7
   - NIST-800-171-3.1.2
@@ -3642,7 +3756,7 @@
       regexp: (?i)(?i)^\s*{{ "ClientAliveCountMax"| regex_escape }}\s+
       state: absent
     with_items: '{{ _etc_ssh_sshd_config_d_has_parameter.files }}'
-    when: _etc_ssh_sshd_config_d_has_parameter.matched
+    when: _etc_ssh_sshd_config_d_has_parameter.matched > 0
   - name: Insert correct line to /etc/ssh/sshd_config.d/00-complianceascode-hardening.conf
     ansible.builtin.lineinfile:
       path: /etc/ssh/sshd_config.d/00-complianceascode-hardening.conf
@@ -3805,7 +3919,7 @@
       regexp: (?i)(?i)^\s*{{ "ClientAliveCountMax"| regex_escape }}\s+
       state: absent
     with_items: '{{ _etc_ssh_sshd_config_d_has_parameter.files }}'
-    when: _etc_ssh_sshd_config_d_has_parameter.matched
+    when: _etc_ssh_sshd_config_d_has_parameter.matched > 0
   - name: Insert correct line to /etc/ssh/sshd_config.d/00-complianceascode-hardening.conf
     ansible.builtin.lineinfile:
       path: /etc/ssh/sshd_config.d/00-complianceascode-hardening.conf
@@ -3970,7 +4084,7 @@
       regexp: (?i)(?i)^\s*{{ "HostbasedAuthentication"| regex_escape }}\s+
       state: absent
     with_items: '{{ _etc_ssh_sshd_config_d_has_parameter.files }}'
-    when: _etc_ssh_sshd_config_d_has_parameter.matched
+    when: _etc_ssh_sshd_config_d_has_parameter.matched > 0
   - name: Insert correct line to /etc/ssh/sshd_config.d/01-complianceascode-reinforce-os-defaults.conf
     ansible.builtin.lineinfile:
       path: /etc/ssh/sshd_config.d/01-complianceascode-reinforce-os-defaults.conf
@@ -4125,7 +4239,7 @@
       regexp: (?i)(?i)^\s*{{ "Compression"| regex_escape }}\s+
       state: absent
     with_items: '{{ _etc_ssh_sshd_config_d_has_parameter.files }}'
-    when: _etc_ssh_sshd_config_d_has_parameter.matched
+    when: _etc_ssh_sshd_config_d_has_parameter.matched > 0
   - name: Insert correct line to /etc/ssh/sshd_config.d/00-complianceascode-hardening.conf
     ansible.builtin.lineinfile:
       path: /etc/ssh/sshd_config.d/00-complianceascode-hardening.conf
@@ -4282,7 +4396,7 @@
       regexp: (?i)(?i)^\s*{{ "PermitEmptyPasswords"| regex_escape }}\s+
       state: absent
     with_items: '{{ _etc_ssh_sshd_config_d_has_parameter.files }}'
-    when: _etc_ssh_sshd_config_d_has_parameter.matched
+    when: _etc_ssh_sshd_config_d_has_parameter.matched > 0
   - name: Insert correct line to /etc/ssh/sshd_config.d/01-complianceascode-reinforce-os-defaults.conf
     ansible.builtin.lineinfile:
       path: /etc/ssh/sshd_config.d/01-complianceascode-reinforce-os-defaults.conf
@@ -4439,7 +4553,7 @@
       regexp: (?i)(?i)^\s*{{ "RhostsRSAAuthentication"| regex_escape }}\s+
       state: absent
     with_items: '{{ _etc_ssh_sshd_config_d_has_parameter.files }}'
-    when: _etc_ssh_sshd_config_d_has_parameter.matched
+    when: _etc_ssh_sshd_config_d_has_parameter.matched > 0
   - name: Insert correct line to /etc/ssh/sshd_config.d/00-complianceascode-hardening.conf
     ansible.builtin.lineinfile:
       path: /etc/ssh/sshd_config.d/00-complianceascode-hardening.conf
@@ -4602,7 +4716,7 @@
       regexp: (?i)(?i)^\s*{{ "PermitRootLogin"| regex_escape }}\s+
       state: absent
     with_items: '{{ _etc_ssh_sshd_config_d_has_parameter.files }}'
-    when: _etc_ssh_sshd_config_d_has_parameter.matched
+    when: _etc_ssh_sshd_config_d_has_parameter.matched > 0
   - name: Insert correct line to /etc/ssh/sshd_config.d/00-complianceascode-hardening.conf
     ansible.builtin.lineinfile:
       path: /etc/ssh/sshd_config.d/00-complianceascode-hardening.conf
@@ -4765,7 +4879,7 @@
       regexp: (?i)(?i)^\s*{{ "IgnoreUserKnownHosts"| regex_escape }}\s+
       state: absent
     with_items: '{{ _etc_ssh_sshd_config_d_has_parameter.files }}'
-    when: _etc_ssh_sshd_config_d_has_parameter.matched
+    when: _etc_ssh_sshd_config_d_has_parameter.matched > 0
   - name: Insert correct line to /etc/ssh/sshd_config.d/00-complianceascode-hardening.conf
     ansible.builtin.lineinfile:
       path: /etc/ssh/sshd_config.d/00-complianceascode-hardening.conf
@@ -4920,7 +5034,7 @@
       regexp: (?i)(?i)^\s*{{ "PermitUserEnvironment"| regex_escape }}\s+
       state: absent
     with_items: '{{ _etc_ssh_sshd_config_d_has_parameter.files }}'
-    when: _etc_ssh_sshd_config_d_has_parameter.matched
+    when: _etc_ssh_sshd_config_d_has_parameter.matched > 0
   - name: Insert correct line to /etc/ssh/sshd_config.d/01-complianceascode-reinforce-os-defaults.conf
     ansible.builtin.lineinfile:
       path: /etc/ssh/sshd_config.d/01-complianceascode-reinforce-os-defaults.conf
@@ -5073,7 +5187,7 @@
       regexp: (?i)(?i)^\s*{{ "StrictModes"| regex_escape }}\s+
       state: absent
     with_items: '{{ _etc_ssh_sshd_config_d_has_parameter.files }}'
-    when: _etc_ssh_sshd_config_d_has_parameter.matched
+    when: _etc_ssh_sshd_config_d_has_parameter.matched > 0
   - name: Insert correct line to /etc/ssh/sshd_config.d/01-complianceascode-reinforce-os-defaults.conf
     ansible.builtin.lineinfile:
       path: /etc/ssh/sshd_config.d/01-complianceascode-reinforce-os-defaults.conf
@@ -5222,7 +5336,7 @@
       regexp: (?i)(?i)^\s*{{ "Banner"| regex_escape }}\s+
       state: absent
     with_items: '{{ _etc_ssh_sshd_config_d_has_parameter.files }}'
-    when: _etc_ssh_sshd_config_d_has_parameter.matched
+    when: _etc_ssh_sshd_config_d_has_parameter.matched > 0
   - name: Insert correct line to /etc/ssh/sshd_config.d/00-complianceascode-hardening.conf
     ansible.builtin.lineinfile:
       path: /etc/ssh/sshd_config.d/00-complianceascode-hardening.conf
@@ -5303,6 +5417,9 @@
   - restrict_strategy | bool
   - sshd_use_priv_separation | bool
   - '"kernel-core" in ansible_facts.packages'
+  - '"openssh-server" in ansible_facts.packages and (((((ansible_facts.packages["openssh-server"] | last)["epoch"]) != None)
+    | ternary((ansible_facts.packages["openssh-server"] | last)["epoch"] ~ ":", "0:")) + ((ansible_facts.packages["openssh-server"]
+    | last)["version"] | split("-") | first)) is version("0:7.5", "<")'
   tags:
   - CCE-88712-5
   - NIST-800-171-3.1.12
@@ -5331,6 +5448,9 @@
   - restrict_strategy | bool
   - sshd_use_priv_separation | bool
   - '"kernel-core" in ansible_facts.packages'
+  - '"openssh-server" in ansible_facts.packages and (((((ansible_facts.packages["openssh-server"] | last)["epoch"]) != None)
+    | ternary((ansible_facts.packages["openssh-server"] | last)["epoch"] ~ ":", "0:")) + ((ansible_facts.packages["openssh-server"]
+    | last)["version"] | split("-") | first)) is version("0:7.5", "<")'
   tags:
   - CCE-88712-5
   - NIST-800-171-3.1.12
@@ -5371,7 +5491,7 @@
       regexp: (?i)(?i)^\s*{{ "UsePrivilegeSeparation"| regex_escape }}\s+
       state: absent
     with_items: '{{ _etc_ssh_sshd_config_d_has_parameter.files }}'
-    when: _etc_ssh_sshd_config_d_has_parameter.matched
+    when: _etc_ssh_sshd_config_d_has_parameter.matched > 0
   - name: Insert correct line to /etc/ssh/sshd_config.d/00-complianceascode-hardening.conf
     ansible.builtin.lineinfile:
       path: /etc/ssh/sshd_config.d/00-complianceascode-hardening.conf
@@ -5389,6 +5509,9 @@
   - restrict_strategy | bool
   - sshd_use_priv_separation | bool
   - '"kernel-core" in ansible_facts.packages'
+  - '"openssh-server" in ansible_facts.packages and (((((ansible_facts.packages["openssh-server"] | last)["epoch"]) != None)
+    | ternary((ansible_facts.packages["openssh-server"] | last)["epoch"] ~ ":", "0:")) + ((ansible_facts.packages["openssh-server"]
+    | last)["version"] | split("-") | first)) is version("0:7.5", "<")'
   - _sshd_config_correctly.matched == 0 or _sshd_config_has_parameter.matched != 1
   tags:
   - CCE-88712-5
@@ -5418,6 +5541,9 @@
   - restrict_strategy | bool
   - sshd_use_priv_separation | bool
   - '"kernel-core" in ansible_facts.packages'
+  - '"openssh-server" in ansible_facts.packages and (((((ansible_facts.packages["openssh-server"] | last)["epoch"]) != None)
+    | ternary((ansible_facts.packages["openssh-server"] | last)["epoch"] ~ ":", "0:")) + ((ansible_facts.packages["openssh-server"]
+    | last)["version"] | split("-") | first)) is version("0:7.5", "<")'
   tags:
   - CCE-88712-5
   - NIST-800-171-3.1.12
@@ -12062,10 +12188,10 @@
   - restrict_strategy
 
 - name: Record Events that Modify User/Group Information - /etc/passwd - Search /etc/audit/rules.d for other rules with specified
-    key audit_rules_usergroup_modification_passwd
+    key audit_rules_usergroup_modification
   ansible.builtin.find:
     paths: /etc/audit/rules.d
-    contains: ^.*(?:-F key=|-k\s+)audit_rules_usergroup_modification_passwd$
+    contains: ^.*(?:-F key=|-k\s+)audit_rules_usergroup_modification$
     patterns: '*.rules'
   register: find_watch_key
   when:
@@ -12098,11 +12224,11 @@
   - no_reboot_needed
   - restrict_strategy
 
-- name: Record Events that Modify User/Group Information - /etc/passwd - Use /etc/audit/rules.d/audit_rules_usergroup_modification_passwd.rules
+- name: Record Events that Modify User/Group Information - /etc/passwd - Use /etc/audit/rules.d/audit_rules_usergroup_modification.rules
     as the recipient for the rule
   ansible.builtin.set_fact:
     all_files:
-    - /etc/audit/rules.d/audit_rules_usergroup_modification_passwd.rules
+    - /etc/audit/rules.d/audit_rules_usergroup_modification.rules
   when:
   - audit_rules_usergroup_modification_passwd | bool
   - low_complexity | bool
@@ -12172,7 +12298,7 @@
 - name: Record Events that Modify User/Group Information - /etc/passwd - Add watch rule for /etc/passwd in /etc/audit/rules.d/
   ansible.builtin.lineinfile:
     path: '{{ all_files[0] }}'
-    line: -a always,exit -F arch=b32 -F path=/etc/passwd -F perm=wa -F key=audit_rules_usergroup_modification_passwd
+    line: -a always,exit -F arch=b32 -F path=/etc/passwd -F perm=wa -F key=audit_rules_usergroup_modification
     create: true
     mode: '0600'
   when:
@@ -12242,10 +12368,10 @@
   - restrict_strategy
 
 - name: Record Events that Modify User/Group Information - /etc/passwd - Search /etc/audit/rules.d for other rules with specified
-    key audit_rules_usergroup_modification_passwd
+    key audit_rules_usergroup_modification
   ansible.builtin.find:
     paths: /etc/audit/rules.d
-    contains: ^.*(?:-F key=|-k\s+)audit_rules_usergroup_modification_passwd$
+    contains: ^.*(?:-F key=|-k\s+)audit_rules_usergroup_modification$
     patterns: '*.rules'
   register: find_watch_key
   when:
@@ -12278,11 +12404,11 @@
   - no_reboot_needed
   - restrict_strategy
 
-- name: Record Events that Modify User/Group Information - /etc/passwd - Use /etc/audit/rules.d/audit_rules_usergroup_modification_passwd.rules
+- name: Record Events that Modify User/Group Information - /etc/passwd - Use /etc/audit/rules.d/audit_rules_usergroup_modification.rules
     as the recipient for the rule
   ansible.builtin.set_fact:
     all_files:
-    - /etc/audit/rules.d/audit_rules_usergroup_modification_passwd.rules
+    - /etc/audit/rules.d/audit_rules_usergroup_modification.rules
   when:
   - audit_rules_usergroup_modification_passwd | bool
   - low_complexity | bool
@@ -12352,7 +12478,7 @@
 - name: Record Events that Modify User/Group Information - /etc/passwd - Add watch rule for /etc/passwd in /etc/audit/rules.d/
   ansible.builtin.lineinfile:
     path: '{{ all_files[0] }}'
-    line: -a always,exit -F arch=b64 -F path=/etc/passwd -F perm=wa -F key=audit_rules_usergroup_modification_passwd
+    line: -a always,exit -F arch=b64 -F path=/etc/passwd -F perm=wa -F key=audit_rules_usergroup_modification
     create: true
     mode: '0600'
   when:
@@ -12423,7 +12549,7 @@
 
 - name: Record Events that Modify User/Group Information - /etc/passwd - Add watch rule for /etc/passwd in /etc/audit/audit.rules
   ansible.builtin.lineinfile:
-    line: -a always,exit -F arch=b32 -F path=/etc/passwd -F perm=wa -F key=audit_rules_usergroup_modification_passwd
+    line: -a always,exit -F arch=b32 -F path=/etc/passwd -F perm=wa -F key=audit_rules_usergroup_modification
     state: present
     dest: /etc/audit/audit.rules
     create: true
@@ -12496,7 +12622,7 @@
 
 - name: Record Events that Modify User/Group Information - /etc/passwd - Add watch rule for /etc/passwd in /etc/audit/audit.rules
   ansible.builtin.lineinfile:
-    line: -a always,exit -F arch=b64 -F path=/etc/passwd -F perm=wa -F key=audit_rules_usergroup_modification_passwd
+    line: -a always,exit -F arch=b64 -F path=/etc/passwd -F perm=wa -F key=audit_rules_usergroup_modification
     state: present
     dest: /etc/audit/audit.rules
     create: true
